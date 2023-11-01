@@ -1,0 +1,45 @@
+From d3b1587f7b77b630bae8ab3f4760eda69bd7fe66 Mon Sep 17 00:00:00 2001
+From: Victor Toso <victortoso@redhat.com>
+Date: Fri, 26 Nov 2021 17:36:09 +0100
+Subject: [PATCH] loader: add check for unknown file type
+
+So we can provide a meaningful error message in case the provided path
+is not accessible to running process.
+
+e.g: running HOME=/root osinfo-query os we would get
+  `Error loading OS data: Unexpected file type`
+and now we get
+  `Error loading OS data: Can't read path /root/.config/osinfo`
+
+This error was first hit with v2v [0] that was leaking $USER and $HOME
+of root user when osinfo-query as vsdm user with `sudo -c vdsm`. The
+example above is a simple way to show lack of permision of
+osinfo-query to read the root's $HOME.
+
+[0] https://bugzilla.redhat.com/show_bug.cgi?id=1901423
+
+Related: https://bugzilla.redhat.com/show_bug.cgi?id=1902720
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+---
+ osinfo/osinfo_loader.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/osinfo/osinfo_loader.c b/osinfo/osinfo_loader.c
+index 3f04fa5..96ca6ee 100644
+--- a/osinfo/osinfo_loader.c
++++ b/osinfo/osinfo_loader.c
+@@ -2374,6 +2374,11 @@ static void osinfo_loader_find_files(OsinfoLoader *loader,
+         }
+         g_object_unref(ents);
+         g_list_free(children);
++    } else if (type == G_FILE_TYPE_UNKNOWN) {
++        g_autofree gchar *path = g_file_get_path(file);
++        g_autofree gchar *msg = g_strdup_printf("Can't read path %s", path);
++        OSINFO_LOADER_SET_ERROR(&error, msg);
++        g_propagate_error(err, error);
+     } else {
+         OSINFO_LOADER_SET_ERROR(&error, "Unexpected file type");
+         g_propagate_error(err, error);
+-- 
+2.33.1
+
